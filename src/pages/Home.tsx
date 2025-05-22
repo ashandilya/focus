@@ -13,9 +13,34 @@ function getRandomVideo(excludeId?: string): Video {
   return next;
 }
 
+function getRandomVideoByCategory(category: string, excludeId?: string): Video {
+  const categoryVideos = videoService.getVideosByCategory(category);
+  if (categoryVideos.length === 0) return getRandomVideo(excludeId);
+  
+  let next;
+  do {
+    next = categoryVideos[Math.floor(Math.random() * categoryVideos.length)];
+  } while (excludeId && next.id === excludeId && categoryVideos.length > 1);
+  return next;
+}
+
+// Get all unique categories from videos
+function getAllCategories(): string[] {
+  const allVideos = videoService.getAllVideos();
+  const categories = new Set<string>();
+  
+  allVideos.forEach(video => {
+    if (video.category) {
+      categories.add(video.category);
+    }
+  });
+  
+  return Array.from(categories).sort();
+}
+
 const Home = () => {
   const [video, setVideo] = useState<Video | null>(null);
-  const [showNext, setShowNext] = useState(true);
+  const [isPlaying, setIsPlaying] = useState(true);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(() => {
     const stored = localStorage.getItem('playerVolume');
@@ -24,13 +49,25 @@ const Home = () => {
   const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  
   const retryCountRef = useRef(0);
+  const loadTimeoutRef = useRef<number>();
+  const playerRef = useRef<ReactPlayer>(null);
   const MAX_RETRIES = 3;
+  const LOADING_TIMEOUT = 8000; // 8 seconds timeout for loading
+
+  // Initialize categories
+  useEffect(() => {
+    setCategories(getAllCategories());
+  }, []);
 
   // Set initial video only once after user clicks play
   const handleStart = () => {
     setVideo(getRandomVideo());
     setStarted(true);
+    setIsPlaying(true);
     setIsLoading(true);
   };
 
@@ -38,33 +75,86 @@ const Home = () => {
     localStorage.setItem('playerVolume', String(volume));
   }, [volume]);
 
+  // Handle category selection
+  const handleCategorySelect = (category: string) => {
+    setSelectedCategory(category);
+    setIsLoading(true);
+    setError(null);
+    retryCountRef.current = 0;
+    setVideo(getRandomVideoByCategory(category, video?.id));
+  };
+
   // Next video logic with retry mechanism
   const handleNext = useCallback(() => {
     if (!video) return;
     setIsLoading(true);
     setError(null);
     retryCountRef.current = 0;
-    setVideo(getRandomVideo(video.id));
-  }, [video]);
+    
+    // Clear any existing loading timeout
+    if (loadTimeoutRef.current) {
+      window.clearTimeout(loadTimeoutRef.current);
+    }
+    
+    // Get next video based on category if selected
+    if (selectedCategory) {
+      setVideo(getRandomVideoByCategory(selectedCategory, video.id));
+    } else {
+      setVideo(getRandomVideo(video.id));
+    }
+  }, [video, selectedCategory]);
 
   const handleError = useCallback((e: any) => {
     console.error('Player error:', e);
     retryCountRef.current += 1;
     
     if (retryCountRef.current >= MAX_RETRIES) {
-      setError('Unable to play video. Please try again later.');
+      setError('Unable to play video. Skipping to next...');
       setIsLoading(false);
+      // Skip to next video after a brief delay
+      setTimeout(() => {
+        handleNext();
+      }, 1500);
       return;
     }
 
     setError(`Error playing video. Retrying... (${retryCountRef.current}/${MAX_RETRIES})`);
     handleNext();
-  }, []);
+  }, [handleNext]);
 
   const handleReady = useCallback(() => {
+    // Clear loading timeout
+    if (loadTimeoutRef.current) {
+      window.clearTimeout(loadTimeoutRef.current);
+      loadTimeoutRef.current = undefined;
+    }
+    
     setIsLoading(false);
     setError(null);
   }, []);
+
+  // Set loading timeout whenever video changes
+  useEffect(() => {
+    if (video && isLoading) {
+      // Clear any existing timeout
+      if (loadTimeoutRef.current) {
+        window.clearTimeout(loadTimeoutRef.current);
+      }
+      
+      // Set timeout to skip video if it doesn't load
+      loadTimeoutRef.current = window.setTimeout(() => {
+        console.error('Video loading timeout:', video.id);
+        setError('Video loading timeout. Skipping to next...');
+        handleNext();
+      }, LOADING_TIMEOUT);
+    }
+    
+    return () => {
+      if (loadTimeoutRef.current) {
+        window.clearTimeout(loadTimeoutRef.current);
+      }
+    };
+  }, [video, isLoading, handleNext]);
 
   return (
     <div 
@@ -80,10 +170,11 @@ const Home = () => {
 
       {/* Error Message */}
       {error && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded z-50">
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded-lg z-50">
           {error}
         </div>
       )}
+      
       {/* Play Music Overlay */}
       {!started && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-30" style={{ pointerEvents: 'auto' }}>
@@ -95,15 +186,17 @@ const Home = () => {
           </button>
         </div>
       )}
+      
       {/* Video Player */}
       {started && video && (
         <>
           <div className="absolute inset-0 z-0">
             <ReactPlayer
+              ref={playerRef}
               url={`https://www.youtube.com/watch?v=${video.id}`}
               width="100vw"
               height="100vh"
-              playing
+              playing={isPlaying}
               controls={false}
               loop={false}
               onEnded={handleNext}
@@ -123,7 +216,9 @@ const Home = () => {
                     playsinline: 1,
                     origin: window.location.origin,
                     enablejsapi: 1,
-                    widget_referrer: window.location.origin
+                    widget_referrer: window.location.origin,
+                    disablekb: 1,
+                    cc_load_policy: 0
                   }
                 }
               }}
@@ -142,17 +237,52 @@ const Home = () => {
               )}
             />
           </div>
-          {/* Next Button - Always visible and interactive */}
-          <button
-            onClick={handleNext}
-            className="next-button absolute top-1/2 right-6 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-4 md:p-5 shadow z-20"
-            style={{ pointerEvents: 'auto' }} // Enable pointer events specifically for this button
-            aria-label="Next"
+          
+          {/* Bottom Controls Box */}
+          <div 
+            className="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-black/70 backdrop-blur-sm rounded-xl overflow-hidden z-30 transition-all duration-300"
+            style={{ 
+              pointerEvents: 'auto',
+              maxWidth: '90vw',
+              boxShadow: '0 4px 20px rgba(0, 0, 0, 0.3)'
+            }}
           >
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7 md:w-8 md:h-8">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.25 6.75L18.25 12m0 0l-5 5.25M18.25 12H5.75" />
-            </svg>
-          </button>
+            {/* Categories Section */}
+            <div className="flex px-2 py-3 max-w-full overflow-x-auto scrollbar-hide">
+              {categories.map(category => (
+                <button
+                  key={category}
+                  onClick={() => handleCategorySelect(category)}
+                  className={`px-3 py-1 rounded-full mx-1 text-sm whitespace-nowrap transition-colors ${
+                    selectedCategory === category 
+                      ? 'bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium shadow-lg' 
+                      : 'bg-white/10 hover:bg-white/20 text-white/80'
+                  }`}
+                >
+                  {category.charAt(0).toUpperCase() + category.slice(1)}
+                </button>
+              ))}
+            </div>
+            
+            {/* Divider */}
+            <div className="w-full h-[1px] bg-white/20"></div>
+            
+            {/* Controls Section */}
+            <div className="flex items-center justify-between px-4 py-3">
+              <div className="text-white text-xs md:text-sm opacity-80 line-clamp-1 max-w-[70%] mr-4">
+                {video.title}
+              </div>
+              <button
+                onClick={handleNext}
+                className="flex items-center justify-center bg-white/20 hover:bg-white/30 text-white rounded-full p-2 md:p-3 shadow transition-all"
+                aria-label="Next"
+              >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5 md:w-6 md:h-6">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M13.25 6.75L18.25 12m0 0l-5 5.25M18.25 12H5.75" />
+                </svg>
+              </button>
+            </div>
+          </div>
         </>
       )}
     </div>

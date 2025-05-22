@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import ReactPlayer from 'react-player';
 import { videoService } from '../services/videoService';
 import type { Video } from '../services/videoService';
@@ -22,25 +22,107 @@ const Home = () => {
     return stored ? parseFloat(stored) : 0.8;
   });
   const [started, setStarted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const hoverTimeoutRef = useRef<number>();
+  const retryCountRef = useRef(0);
+  const MAX_RETRIES = 3;
+  const mouseActivityRef = useRef(false);
 
   // Set initial video only once after user clicks play
   const handleStart = () => {
     setVideo(getRandomVideo());
     setStarted(true);
+    setIsLoading(true);
   };
 
   useEffect(() => {
     localStorage.setItem('playerVolume', String(volume));
   }, [volume]);
 
-  // Next video logic
+  // Next video logic with retry mechanism
   const handleNext = useCallback(() => {
     if (!video) return;
+    setIsLoading(true);
+    setError(null);
+    retryCountRef.current = 0;
     setVideo(getRandomVideo(video.id));
   }, [video]);
 
+  const handleError = useCallback((e: any) => {
+    console.error('Player error:', e);
+    retryCountRef.current += 1;
+    
+    if (retryCountRef.current >= MAX_RETRIES) {
+      setError('Unable to play video. Please try again later.');
+      setIsLoading(false);
+      return;
+    }
+
+    setError(`Error playing video. Retrying... (${retryCountRef.current}/${MAX_RETRIES})`);
+    handleNext();
+  }, []);
+
+  const handleReady = useCallback(() => {
+    setIsLoading(false);
+    setError(null);
+  }, []);
+
+  useEffect(() => {
+    // Set up document-level mouse move listener to track activity
+    const handleMouseMove = () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+      
+      mouseActivityRef.current = true;
+      setShowNext(true);
+      
+      hoverTimeoutRef.current = setTimeout(() => {
+        if (mouseActivityRef.current) {
+          mouseActivityRef.current = false;
+          // Only hide the button after inactivity
+          setShowNext(false);
+        }
+      }, 2000);
+    };
+    
+    // Handle mouse leaving the window
+    const handleMouseLeave = (e: MouseEvent) => {
+      // Don't hide controls when mouse leaves the window
+      // We'll rely on the inactivity timer instead
+      if (e.relatedTarget === null) {
+        mouseActivityRef.current = true;
+      }
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseleave', handleMouseLeave);
+    
+    return () => {
+      if (hoverTimeoutRef.current) {
+        clearTimeout(hoverTimeoutRef.current);
+      }
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseleave', handleMouseLeave);
+    };
+  }, []);
+
   return (
     <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden" style={{ margin: 0, padding: 0 }}>
+      {/* Loading Indicator */}
+      {isLoading && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-white"></div>
+        </div>
+      )}
+
+      {/* Error Message */}
+      {error && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-red-500 text-white px-4 py-2 rounded z-50">
+          {error}
+        </div>
+      )}
       {/* Play Music Overlay */}
       {!started && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-30">
@@ -64,6 +146,8 @@ const Home = () => {
               controls={false}
               loop={false}
               onEnded={handleNext}
+              onError={handleError}
+              onReady={handleReady}
               style={{ position: 'absolute', top: 0, left: 0, width: '100vw', height: '100vh', pointerEvents: 'none' }}
               config={{
                 youtube: {
@@ -75,7 +159,10 @@ const Home = () => {
                     showinfo: 0,
                     fs: 0,
                     iv_load_policy: 3,
-                    playsinline: 1
+                    playsinline: 1,
+                    origin: window.location.origin,
+                    enablejsapi: 1,
+                    widget_referrer: window.location.origin
                   }
                 }
               }}
@@ -94,18 +181,12 @@ const Home = () => {
               )}
             />
           </div>
-          {/* Transparent overlay for hover logic, sibling to ReactPlayer */}
-          <div
-            className="absolute inset-0 z-10"
-            style={{ background: 'transparent' }}
-            onMouseEnter={() => setShowNext(true)}
-            onMouseLeave={() => setShowNext(false)}
-          />
-          {/* Next Button (only on hover) */}
+          {/* Transparent overlay for hover logic - replaced with document-level listeners */}
+          {/* Next Button */}
           <button
             onClick={handleNext}
-            className={`absolute top-1/2 right-6 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-4 md:p-5 shadow transition ${showNext ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}
-            style={{ zIndex: 20, transition: 'opacity 0.2s' }}
+            className={`absolute top-1/2 right-6 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-4 md:p-5 shadow transition-all duration-300 ease-in-out ${showNext ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 pointer-events-none'}`}
+            style={{ zIndex: 20 }}
             aria-label="Next"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7 md:w-8 md:h-8">

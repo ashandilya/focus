@@ -15,7 +15,7 @@ function getRandomVideo(excludeId?: string): Video {
 
 const Home = () => {
   const [video, setVideo] = useState<Video | null>(null);
-  const [showNext, setShowNext] = useState(false);
+  const [showNext, setShowNext] = useState(true);
   const [muted, setMuted] = useState(false);
   const [volume, setVolume] = useState(() => {
     const stored = localStorage.getItem('playerVolume');
@@ -24,10 +24,8 @@ const Home = () => {
   const [started, setStarted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const hoverTimeoutRef = useRef<number>();
   const retryCountRef = useRef(0);
   const MAX_RETRIES = 3;
-  const mouseActivityRef = useRef(false);
 
   // Set initial video only once after user clicks play
   const handleStart = () => {
@@ -68,48 +66,11 @@ const Home = () => {
     setError(null);
   }, []);
 
-  useEffect(() => {
-    // Set up document-level mouse move listener to track activity
-    const handleMouseMove = () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-      
-      mouseActivityRef.current = true;
-      setShowNext(true);
-      
-      hoverTimeoutRef.current = setTimeout(() => {
-        if (mouseActivityRef.current) {
-          mouseActivityRef.current = false;
-          // Only hide the button after inactivity
-          setShowNext(false);
-        }
-      }, 2000);
-    };
-    
-    // Handle mouse leaving the window
-    const handleMouseLeave = (e: MouseEvent) => {
-      // Don't hide controls when mouse leaves the window
-      // We'll rely on the inactivity timer instead
-      if (e.relatedTarget === null) {
-        mouseActivityRef.current = true;
-      }
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseleave', handleMouseLeave);
-    
-    return () => {
-      if (hoverTimeoutRef.current) {
-        clearTimeout(hoverTimeoutRef.current);
-      }
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseleave', handleMouseLeave);
-    };
-  }, []);
-
   return (
-    <div className="fixed inset-0 w-screen h-screen bg-black overflow-hidden" style={{ margin: 0, padding: 0 }}>
+    <div 
+      className="fixed inset-0 w-screen h-screen bg-black overflow-hidden" 
+      style={{ margin: 0, padding: 0, pointerEvents: 'none' }} // Disable pointer events for the entire container
+    >
       {/* Loading Indicator */}
       {isLoading && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-50">
@@ -125,7 +86,7 @@ const Home = () => {
       )}
       {/* Play Music Overlay */}
       {!started && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-30">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/80 z-30" style={{ pointerEvents: 'auto' }}>
           <button
             onClick={handleStart}
             className="bg-white text-black px-8 py-4 rounded-full text-2xl font-bold shadow-lg hover:bg-gray-200 transition"
@@ -181,12 +142,11 @@ const Home = () => {
               )}
             />
           </div>
-          {/* Transparent overlay for hover logic - replaced with document-level listeners */}
-          {/* Next Button */}
+          {/* Next Button - Always visible and interactive */}
           <button
             onClick={handleNext}
-            className={`absolute top-1/2 right-6 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-4 md:p-5 shadow transition-all duration-300 ease-in-out ${showNext ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-4 pointer-events-none'}`}
-            style={{ zIndex: 20 }}
+            className="next-button absolute top-1/2 right-6 -translate-y-1/2 bg-white/20 hover:bg-white/40 text-white rounded-full p-4 md:p-5 shadow z-20"
+            style={{ pointerEvents: 'auto' }} // Enable pointer events specifically for this button
             aria-label="Next"
           >
             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-7 h-7 md:w-8 md:h-8">

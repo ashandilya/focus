@@ -51,6 +51,7 @@ const Home = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [showPauseButton, setShowPauseButton] = useState(false);
   
   const retryCountRef = useRef(0);
   const loadTimeoutRef = useRef<number>();
@@ -156,6 +157,10 @@ const Home = () => {
     };
   }, [video, isLoading, handleNext]);
 
+  const togglePlayPause = () => {
+    setIsPlaying(!isPlaying);
+  };
+
   return (
     <div 
       className="fixed inset-0 w-screen h-screen bg-black overflow-hidden" 
@@ -237,6 +242,32 @@ const Home = () => {
               )}
             />
           </div>
+
+          {/* Center Pause/Play Button Overlay */}
+          <div 
+            className="absolute inset-0 z-20 flex items-center justify-center"
+            style={{ pointerEvents: 'auto' }}
+            onMouseEnter={() => setShowPauseButton(true)}
+            onMouseLeave={() => setShowPauseButton(false)}
+          >
+            <button
+              onClick={togglePlayPause}
+              className={`bg-black/50 backdrop-blur-sm rounded-full p-4 transition-all duration-300 ${
+                showPauseButton ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+              }`}
+              aria-label={isPlaying ? 'Pause' : 'Play'}
+            >
+              {isPlaying ? (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 24 24" className="w-12 h-12">
+                  <path d="M6 4h4v16H6V4zm8 0h4v16h-4V4z"/>
+                </svg>
+              ) : (
+                <svg xmlns="http://www.w3.org/2000/svg" fill="white" viewBox="0 0 24 24" className="w-12 h-12">
+                  <path d="M8 5v14l11-7z"/>
+                </svg>
+              )}
+            </button>
+          </div>
           
           {/* Bottom Controls Box */}
           <div 
@@ -289,4 +320,4 @@ const Home = () => {
   );
 };
 
-export default Home; 
+export default Home;

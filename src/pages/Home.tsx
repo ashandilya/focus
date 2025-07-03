@@ -60,7 +60,7 @@ const Home = () => {
   const playerRef = useRef<ReactPlayer>(null);
   const MAX_RETRIES = 2;
   const MAX_CONSECUTIVE_ERRORS = 3;
-  const LOADING_TIMEOUT = 15000; // Reduced to 15 seconds
+  const LOADING_TIMEOUT = 30000; // Increased to 30 seconds
   const ERROR_COOLDOWN = 2000; // 2 second delay between retries
 
   // Initialize categories

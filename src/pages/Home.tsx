@@ -41,7 +41,7 @@ function getAllCategories(): string[] {
 const Home = () => {
   const [video, setVideo] = useState<Video | null>(null);
   const [isPlaying, setIsPlaying] = useState(true);
-  const [muted, setMuted] = useState(false);
+  const [muted, setMuted] = useState(true); // Changed from false to true
   const [volume, setVolume] = useState(() => {
     const stored = localStorage.getItem('playerVolume');
     return stored ? parseFloat(stored) : 0.8;

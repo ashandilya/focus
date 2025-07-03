@@ -57,7 +57,7 @@ const Home = () => {
   const loadTimeoutRef = useRef<number>();
   const playerRef = useRef<ReactPlayer>(null);
   const MAX_RETRIES = 3;
-  const LOADING_TIMEOUT = 8000; // 8 seconds timeout for loading
+  const LOADING_TIMEOUT = 15000; // Increased from 8000 to 15000 milliseconds (15 seconds)
 
   // Initialize categories
   useEffect(() => {

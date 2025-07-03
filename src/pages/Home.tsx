@@ -56,6 +56,7 @@ const Home = () => {
   const retryCountRef = useRef(0);
   const loadTimeoutRef = useRef<number>();
   const playerRef = useRef<ReactPlayer>(null);
+  const hideTimeoutRef = useRef<number>();
   const MAX_RETRIES = 3;
   const LOADING_TIMEOUT = 20000; // Increased from 15000 to 20000 milliseconds (20 seconds)
 
@@ -161,6 +162,36 @@ const Home = () => {
     setIsPlaying(!isPlaying);
   };
 
+  const handleMouseMove = useCallback(() => {
+    setShowPauseButton(true);
+    
+    // Clear existing timeout
+    if (hideTimeoutRef.current) {
+      window.clearTimeout(hideTimeoutRef.current);
+    }
+    
+    // Hide button after 3 seconds of no mouse movement
+    hideTimeoutRef.current = window.setTimeout(() => {
+      setShowPauseButton(false);
+    }, 3000);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    if (hideTimeoutRef.current) {
+      window.clearTimeout(hideTimeoutRef.current);
+    }
+    setShowPauseButton(false);
+  }, []);
+
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (hideTimeoutRef.current) {
+        window.clearTimeout(hideTimeoutRef.current);
+      }
+    };
+  }, []);
+
   return (
     <div 
       className="fixed inset-0 w-screen h-screen bg-black overflow-hidden" 
@@ -247,13 +278,13 @@ const Home = () => {
           <div 
             className="absolute inset-0 z-20 flex items-center justify-center"
             style={{ pointerEvents: 'auto' }}
-            onMouseEnter={() => setShowPauseButton(true)}
-            onMouseLeave={() => setShowPauseButton(false)}
+            onMouseMove={handleMouseMove}
+            onMouseLeave={handleMouseLeave}
           >
             <button
               onClick={togglePlayPause}
               className={`bg-black/50 backdrop-blur-sm rounded-full p-4 transition-all duration-300 ${
-                showPauseButton ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
+                showPauseButton ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'
               }`}
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >

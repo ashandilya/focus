@@ -52,12 +52,13 @@ const Home = () => {
   const [categories, setCategories] = useState<string[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [showPauseButton, setShowPauseButton] = useState(false);
+  const [consecutiveTimeoutCount, setConsecutiveTimeoutCount] = useState(0);
   
   const retryCountRef = useRef(0);
   const loadTimeoutRef = useRef<number>();
   const playerRef = useRef<ReactPlayer>(null);
-  const hideTimeoutRef = useRef<number>();
   const MAX_RETRIES = 3;
+  const MAX_CONSECUTIVE_TIMEOUTS = 5;
   const LOADING_TIMEOUT = 20000; // Increased from 15000 to 20000 milliseconds (20 seconds)
 
   // Initialize categories
@@ -71,6 +72,7 @@ const Home = () => {
     setStarted(true);
     setIsPlaying(true);
     setIsLoading(true);
+    setConsecutiveTimeoutCount(0);
   };
 
   useEffect(() => {
@@ -83,6 +85,7 @@ const Home = () => {
     setIsLoading(true);
     setError(null);
     retryCountRef.current = 0;
+    setConsecutiveTimeoutCount(0);
     setVideo(getRandomVideoByCategory(category, video?.id));
   };
 
@@ -92,6 +95,7 @@ const Home = () => {
     setIsLoading(true);
     setError(null);
     retryCountRef.current = 0;
+    setConsecutiveTimeoutCount(0);
     
     // Clear any existing loading timeout
     if (loadTimeoutRef.current) {
@@ -133,6 +137,7 @@ const Home = () => {
     
     setIsLoading(false);
     setError(null);
+    setConsecutiveTimeoutCount(0);
   }, []);
 
   // Set loading timeout whenever video changes
@@ -146,8 +151,18 @@ const Home = () => {
       // Set timeout to skip video if it doesn't load
       loadTimeoutRef.current = window.setTimeout(() => {
         console.error('Video loading timeout:', video.id);
-        setError('Video loading timeout. Skipping to next...');
-        handleNext();
+        
+        const newTimeoutCount = consecutiveTimeoutCount + 1;
+        setConsecutiveTimeoutCount(newTimeoutCount);
+        
+        if (newTimeoutCount >= MAX_CONSECUTIVE_TIMEOUTS) {
+          setError('Multiple videos failed to load. Please try again later.');
+          setIsLoading(false);
+          setIsPlaying(false);
+        } else {
+          setError('Video loading timeout. Skipping to next...');
+          handleNext();
+        }
       }, LOADING_TIMEOUT);
     }
     
@@ -156,41 +171,11 @@ const Home = () => {
         window.clearTimeout(loadTimeoutRef.current);
       }
     };
-  }, [video, isLoading, handleNext]);
+  }, [video, isLoading, handleNext, consecutiveTimeoutCount]);
 
   const togglePlayPause = () => {
     setIsPlaying(!isPlaying);
   };
-
-  const handleMouseMove = useCallback(() => {
-    setShowPauseButton(true);
-    
-    // Clear existing timeout
-    if (hideTimeoutRef.current) {
-      window.clearTimeout(hideTimeoutRef.current);
-    }
-    
-    // Hide button after 3 seconds of no mouse movement
-    hideTimeoutRef.current = window.setTimeout(() => {
-      setShowPauseButton(false);
-    }, 3000);
-  }, []);
-
-  const handleMouseLeave = useCallback(() => {
-    if (hideTimeoutRef.current) {
-      window.clearTimeout(hideTimeoutRef.current);
-    }
-    setShowPauseButton(false);
-  }, []);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (hideTimeoutRef.current) {
-        window.clearTimeout(hideTimeoutRef.current);
-      }
-    };
-  }, []);
 
   return (
     <div 
@@ -278,13 +263,13 @@ const Home = () => {
           <div 
             className="absolute inset-0 z-20 flex items-center justify-center"
             style={{ pointerEvents: 'auto' }}
-            onMouseMove={handleMouseMove}
-            onMouseLeave={handleMouseLeave}
+            onMouseEnter={() => setShowPauseButton(true)}
+            onMouseLeave={() => setShowPauseButton(false)}
           >
             <button
               onClick={togglePlayPause}
               className={`bg-black/50 backdrop-blur-sm rounded-full p-4 transition-all duration-300 ${
-                showPauseButton ? 'opacity-100 scale-100' : 'opacity-0 scale-75 pointer-events-none'
+                showPauseButton ? 'opacity-100 scale-100' : 'opacity-0 scale-75'
               }`}
               aria-label={isPlaying ? 'Pause' : 'Play'}
             >
